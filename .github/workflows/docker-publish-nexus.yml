@@ -1,0 +1,23 @@
+name: Docker Build and Push To Custom Nexus3 Server
+
+on:
+  push:
+    branches:
+      - my
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Login to Nexus Docker Registry
+      run: docker login -u ${{ secrets.NEXUS_USERNAME }} -p ${{ secrets.NEXUS_PASSWORD }} ${{ secrets.NEXUS_DOMAIN }}
+
+    - name: Build Docker image
+      run: docker build -t ${{ secrets.NEXUS_DOMAIN }}/YaKun9/martialbe-one-api:latest .
+
+    - name: Push Docker image to Nexus
+      run: docker push ${{ secrets.NEXUS_DOMAIN }}/YaKun9/martialbe-one-api:latest
