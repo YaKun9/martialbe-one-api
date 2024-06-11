@@ -1,4 +1,4 @@
-name: Docker Build and Push To Custom Nexus3 Server
+name: Docker Push To Nexus3
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
       run: docker login -u ${{ secrets.NEXUS_USERNAME }} -p ${{ secrets.NEXUS_PASSWORD }} ${{ secrets.NEXUS_DOMAIN }}
 
     - name: Build Docker image
-      run: docker build -t ${{ secrets.NEXUS_DOMAIN }}/YaKun9/martialbe-one-api:latest .
+      run: docker build -t yakun9/martialbe-one-api:latest .
 
     - name: Push Docker image to Nexus
-      run: docker push ${{ secrets.NEXUS_DOMAIN }}/YaKun9/martialbe-one-api:latest
+      run: docker push ${{ secrets.NEXUS_DOMAIN }}/yakun9/martialbe-one-api:latest
