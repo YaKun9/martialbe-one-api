@@ -20,4 +20,4 @@ jobs:
       run: docker build -t yakun9/martialbe-one-api:latest .
 
     - name: Push Docker image to Nexus
-      run: docker push ${{ secrets.NEXUS_DOMAIN }}/yakun9/martialbe-one-api:latest
+      run: docker push yakun9/martialbe-one-api:latest
