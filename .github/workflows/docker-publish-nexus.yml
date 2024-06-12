@@ -17,12 +17,16 @@ jobs:
       run: |
         echo "REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
         echo "REPO_NAME=$(basename ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        echo "DATE_TAG=$(date +'%y%m%d')" >> $GITHUB_ENV
 
     - name: Login to Nexus Docker Registry
       run: docker login -u ${{ secrets.NEXUS_USERNAME }} -p ${{ secrets.NEXUS_PASSWORD }} ${{ secrets.NEXUS_DOMAIN }}
 
     - name: Build Docker image with cache
-      run: docker build -t ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}:latest .
+      run: docker build -t ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}:latest -t ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}:${{ env.DATE_TAG }} .
 
-    - name: Push Docker image to Nexus
+    - name: Push Docker image to Nexus with latest tag
       run: docker push ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}:latest
+
+    - name: Push Docker image to Nexus with date tag
+      run: docker push ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}:${{ env.DATE_TAG }}
