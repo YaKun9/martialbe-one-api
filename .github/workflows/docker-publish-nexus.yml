@@ -3,7 +3,7 @@ name: Docker Push To Nexus3
 on:
   push:
     branches:
-      - my
+      - main
 
 jobs:
   build-and-push:
