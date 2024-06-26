@@ -8,7 +8,6 @@ on:
       - "v*"
     paths-ignore:
       - "README.md"
-  workflow_dispatch:
 
 jobs:
   build-and-push:
@@ -21,27 +20,17 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
       - name: Save dev version info
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           HASH=$(git rev-parse --short=7 HEAD)
           echo "dev-$HASH" > VERSION
-
       - name: Save Tag version info
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           git describe --tags > VERSION
-
-      - name: Set version for manual trigger
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "manual-$(date +%Y%m%d%H%M%S)" > VERSION
-
       - uses: actions/setup-node@v3
         with:
           node-version: 16
-
       - name: Build Frontend
         env:
           CI: ""
@@ -51,12 +40,10 @@ jobs:
           yarn install
           REACT_APP_VERSION=$VERSION yarn run build
           cd ..
-
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
           go-version: ">=1.18.0"
-
       - name: Build Backend (amd64)
         run: |
           go mod download
@@ -68,28 +55,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install gcc-aarch64-linux-gnu
           CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X 'one-api/common.Version=$(cat VERSION)' -extldflags '-static'" -o one-api-arm64
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Login to Nexus Docker Registry
-        run: docker login -u ${{ secrets.NEXUS_USERNAME }} -p ${{ secrets.NEXUS_PASSWORD }} ${{ secrets.NEXUS_DOMAIN }}
+      - name: Login to Nexus
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.NEXUS_DOMAIN }}
+          username: ${{ secrets.NEXUS_USERNAME }}
+          password: ${{ secrets.NEXUS_PASSWORD }}
 
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
         with:
+          # list of Docker images to use as base name for tags
           images: |
-            ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}
+            ${{ secrets.NEXUS_DOMAIN }}/${{ github.repository }}
+          # generate Docker tags based on the following events/attributes
           tags: |
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
             type=pep440,pattern={{raw}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
 
-      - name: Build and push to Nexus
+      - name: Build and push
         uses: docker/build-push-action@v4
         with:
           context: .
@@ -102,19 +94,3 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           file: Dockerfile-action
-
-      - name: Set environment variables for Nexus
-        run: |
-          echo "REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          echo "REPO_NAME=$(basename ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          echo "DATE_TAG=$(date +'%y%m%d')" >> $GITHUB_ENV
-
-      - name: Push Docker image to Nexus with latest tag
-        run: |
-          docker tag ${{ fromJSON(steps.meta.outputs.json).tags[0] }} ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}:latest
-          docker push ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}:latest
-
-      - name: Push Docker image to Nexus with date tag
-        run: |
-          docker tag ${{ fromJSON(steps.meta.outputs.json).tags[0] }} ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}:${{ env.DATE_TAG }}
-          docker push ${{ secrets.NEXUS_DOMAIN }}/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}:${{ env.DATE_TAG }}
