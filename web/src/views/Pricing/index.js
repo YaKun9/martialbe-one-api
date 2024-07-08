@@ -208,7 +208,7 @@ const Pricing = () => {
         <Button variant="contained" color="primary" startIcon={<IconPlus />} onClick={() => handleOpenaddModal(0)}>
           新建
         </Button>
-        <Button variant="contained" startIcon={<IconRefresh width={'18px'} />}>
+        <Button variant="contained" onClick={handleRefresh} startIcon={<IconRefresh width={'18px'} />}>
           刷新
         </Button>
         <Button
@@ -241,7 +241,7 @@ const Pricing = () => {
               <Single ownedby={ownedby} reloadData={reloadData} prices={prices} />
             </CustomTabPanel>
             <CustomTabPanel value={value} index={1}>
-              <Multiple ownedby={ownedby} reloadData={reloadData} prices={prices} />
+              <Multiple ownedby={ownedby} reloadData={reloadData} prices={prices} handleOpenModal={handleOpenaddModal} />
             </CustomTabPanel>
           </Box>
         </AdminContainer>
