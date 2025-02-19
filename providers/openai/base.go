@@ -21,6 +21,7 @@ type OpenAIProvider struct {
 	IsAzure              bool
 	BalanceAction        bool
 	SupportStreamOptions bool
+	StreamEscapeJSON     bool
 }
 
 // 创建 OpenAIProvider
@@ -106,8 +107,13 @@ func ErrorHandle(openaiError *types.OpenAIErrorResponse) *types.OpenAIError {
 func (p *OpenAIProvider) GetFullRequestURL(requestURL string, modelName string) string {
 	baseURL := strings.TrimSuffix(p.GetBaseURL(), "/")
 
-	if strings.HasPrefix(modelName, "gpt-4o-realtime") {
-		baseURL = strings.Replace(baseURL, "https://", "wss://", 1)
+	if strings.Contains(modelName, "-realtime") {
+		if strings.HasPrefix(baseURL, "https://") {
+			baseURL = strings.Replace(baseURL, "https://", "wss://", 1)
+		} else {
+			baseURL = strings.Replace(baseURL, "http://", "ws://", 1)
+		}
+
 		if p.IsAzure {
 			// wss://my-eastus2-openai-resource.openai.azure.com/openai/realtime?api-version=2024-10-01-preview&deployment=gpt-4o-realtime-preview-1001
 			requestURL = fmt.Sprintf("/openai/%s?api-version=%s&deployment=%s", requestURL, p.Channel.Other, modelName)
@@ -132,8 +138,13 @@ func (p *OpenAIProvider) GetFullRequestURL(requestURL string, modelName string) 
 				requestURL = fmt.Sprintf("/openai/deployments/%s%s?api-version=%s", modelName, requestURL, apiVersion)
 			}
 		} else {
-			requestURL = strings.TrimPrefix(requestURL, "/v1")
-			requestURL = fmt.Sprintf("/openai%s?api-version=%s", requestURL, apiVersion)
+			if strings.Contains(requestURL, "isGetAzureModelList") {
+				//专门生成用于azure获取模型部署列表的URL，因为azure只有2023-03-15-preview版本等特定版本支持通过api-key获取models 所以本url固定写死
+				requestURL = "/openai/deployments?api-version=2023-03-15-preview"
+			} else {
+				requestURL = strings.TrimPrefix(requestURL, "/v1")
+				requestURL = fmt.Sprintf("/openai%s?api-version=%s", requestURL, apiVersion)
+			}
 		}
 	}
 

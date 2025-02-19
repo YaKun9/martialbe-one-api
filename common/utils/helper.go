@@ -242,6 +242,15 @@ func Contains[T comparable](value T, slice []T) bool {
 	return false
 }
 
+func ContainsString(s string, keywords []string) bool {
+	for _, keyword := range keywords {
+		if strings.Contains(s, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
 func SliceToMap[T comparable](slice []T) map[T]bool {
 	res := make(map[T]bool)
 	for _, item := range slice {
@@ -345,4 +354,12 @@ func GetGinValue[T any](c *gin.Context, key string) (T, bool) {
 
 func GetPointer[T any](val T) *T {
 	return &val
+}
+
+func GetLocalTimezone() string {
+	if tz := os.Getenv("TZ"); tz != "" {
+		return tz
+	}
+
+	return "Asia/Shanghai"
 }

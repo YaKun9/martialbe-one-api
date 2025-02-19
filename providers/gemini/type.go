@@ -7,17 +7,18 @@ import (
 	"one-api/common/image"
 	"one-api/common/utils"
 	"one-api/types"
+	"strings"
 )
 
 type GeminiChatRequest struct {
 	Model             string                     `json:"-"`
 	Stream            bool                       `json:"-"`
 	Contents          []GeminiChatContent        `json:"contents"`
-	SafetySettings    []GeminiChatSafetySettings `json:"safety_settings,omitempty"`
-	GenerationConfig  GeminiChatGenerationConfig `json:"generation_config,omitempty"`
+	SafetySettings    []GeminiChatSafetySettings `json:"safetySettings,omitempty"`
+	GenerationConfig  GeminiChatGenerationConfig `json:"generationConfig,omitempty"`
 	Tools             []GeminiChatTools          `json:"tools,omitempty"`
 	ToolConfig        *GeminiToolConfig          `json:"toolConfig,omitempty"`
-	SystemInstruction *GeminiChatContent         `json:"systemInstruction,omitempty"`
+	SystemInstruction any                        `json:"systemInstruction,omitempty"`
 }
 
 type GeminiToolConfig struct {
@@ -25,8 +26,8 @@ type GeminiToolConfig struct {
 }
 
 type GeminiFunctionCallingConfig struct {
-	Model                string   `json:"model,omitempty"`
-	AllowedFunctionNames []string `json:"allowedFunctionNames,omitempty"`
+	Model                string `json:"model,omitempty"`
+	AllowedFunctionNames any    `json:"allowedFunctionNames,omitempty"`
 }
 type GeminiInlineData struct {
 	MimeType string `json:"mimeType"`
@@ -69,10 +70,13 @@ func (candidate *GeminiChatCandidate) ToOpenAIStreamChoice(request *types.ChatCo
 		Delta: types.ChatCompletionStreamChoiceDelta{
 			Role: types.ChatMessageRoleAssistant,
 		},
-		FinishReason: types.FinishReasonStop,
 	}
 
-	content := ""
+	if candidate.FinishReason != nil {
+		choice.FinishReason = ConvertFinishReason(*candidate.FinishReason)
+	}
+
+	var content []string
 	isTools := false
 
 	for _, part := range candidate.Content.Parts {
@@ -84,16 +88,16 @@ func (candidate *GeminiChatCandidate) ToOpenAIStreamChoice(request *types.ChatCo
 			choice.Delta.ToolCalls = append(choice.Delta.ToolCalls, part.FunctionCall.ToOpenAITool())
 		} else {
 			if part.ExecutableCode != nil {
-				content += "```" + part.ExecutableCode.Language + "\n" + part.ExecutableCode.Code + "\n```\n"
+				content = append(content, "```"+part.ExecutableCode.Language+"\n"+part.ExecutableCode.Code+"\n```")
 			} else if part.CodeExecutionResult != nil {
-				content += "```output\n" + part.CodeExecutionResult.Output + "\n```\n"
+				content = append(content, "```output\n"+part.CodeExecutionResult.Output+"\n```")
 			} else {
-				content += part.Text
+				content = append(content, part.Text)
 			}
 		}
 	}
 
-	choice.Delta.Content = content
+	choice.Delta.Content = strings.Join(content, "\n")
 
 	if isTools {
 		choice.FinishReason = types.FinishReasonToolCalls
@@ -109,7 +113,11 @@ func (candidate *GeminiChatCandidate) ToOpenAIChoice(request *types.ChatCompleti
 		Message: types.ChatCompletionMessage{
 			Role: "assistant",
 		},
-		FinishReason: types.FinishReasonStop,
+		// FinishReason: types.FinishReasonStop,
+	}
+
+	if candidate.FinishReason != nil {
+		choice.FinishReason = ConvertFinishReason(*candidate.FinishReason)
 	}
 
 	if len(candidate.Content.Parts) == 0 {
@@ -117,7 +125,7 @@ func (candidate *GeminiChatCandidate) ToOpenAIChoice(request *types.ChatCompleti
 		return choice
 	}
 
-	content := ""
+	var content []string
 	useTools := false
 
 	for _, part := range candidate.Content.Parts {
@@ -129,16 +137,16 @@ func (candidate *GeminiChatCandidate) ToOpenAIChoice(request *types.ChatCompleti
 			choice.Message.ToolCalls = append(choice.Message.ToolCalls, part.FunctionCall.ToOpenAITool())
 		} else {
 			if part.ExecutableCode != nil {
-				content += "```" + part.ExecutableCode.Language + "\n" + part.ExecutableCode.Code + "\n```\n"
+				content = append(content, "```"+part.ExecutableCode.Language+"\n"+part.ExecutableCode.Code+"\n```")
 			} else if part.CodeExecutionResult != nil {
-				content += "```output\n" + part.CodeExecutionResult.Output + "\n```\n"
+				content = append(content, "```output\n"+part.CodeExecutionResult.Output+"\n```")
 			} else {
-				content += part.Text
+				content = append(content, part.Text)
 			}
 		}
 	}
 
-	choice.Message.Content = content
+	choice.Message.Content = strings.Join(content, "\n")
 
 	if useTools {
 		choice.FinishReason = types.FinishReasonToolCalls
@@ -184,8 +192,10 @@ type GeminiChatSafetySettings struct {
 }
 
 type GeminiChatTools struct {
-	FunctionDeclarations []types.ChatCompletionFunction `json:"functionDeclarations,omitempty"`
-	CodeExecution        *GeminiCodeExecution           `json:"codeExecution,omitempty"`
+	FunctionDeclarations  []types.ChatCompletionFunction `json:"functionDeclarations,omitempty"`
+	CodeExecution         *GeminiCodeExecution           `json:"codeExecution,omitempty"`
+	GoogleSearch          any                            `json:"googleSearch,omitempty"`
+	GoogleSearchRetrieval any                            `json:"googleSearchRetrieval,omitempty"`
 }
 
 type GeminiCodeExecution struct {
@@ -239,7 +249,7 @@ type GeminiUsageMetadata struct {
 
 type GeminiChatCandidate struct {
 	Content               GeminiChatContent        `json:"content"`
-	FinishReason          string                   `json:"finishReason"`
+	FinishReason          *string                  `json:"finishReason,omitempty"`
 	Index                 int64                    `json:"index"`
 	SafetyRatings         []GeminiChatSafetyRating `json:"safetyRatings"`
 	CitationMetadata      any                      `json:"citationMetadata,omitempty"`
@@ -267,50 +277,72 @@ func (g *GeminiChatResponse) GetResponseText() string {
 	return ""
 }
 
-func OpenAIToGeminiChatContent(openaiContents []types.ChatCompletionMessage) ([]GeminiChatContent, *types.OpenAIErrorWithStatusCode) {
+func OpenAIToGeminiChatContent(openaiContents []types.ChatCompletionMessage) ([]GeminiChatContent, string, *types.OpenAIErrorWithStatusCode) {
 	contents := make([]GeminiChatContent, 0)
-	useToolName := ""
+	// useToolName := ""
+	var systemContent []string
+	toolCallId := make(map[string]string)
+
 	for _, openaiContent := range openaiContents {
+		if openaiContent.IsSystemRole() {
+			systemContent = append(systemContent, openaiContent.StringContent())
+			continue
+		}
+
 		content := GeminiChatContent{
 			Role:  ConvertRole(openaiContent.Role),
 			Parts: make([]GeminiPart, 0),
 		}
-		content.Role = ConvertRole(openaiContent.Role)
-		if openaiContent.ToolCalls != nil || openaiContent.FunctionCall != nil {
-			if openaiContent.ToolCalls != nil {
-				useToolName = openaiContent.ToolCalls[0].Function.Name
-			} else {
-				useToolName = openaiContent.FunctionCall.Name
-			}
-			content = GeminiChatContent{
-				Role: "model",
-				Parts: []GeminiPart{
-					{
-						FunctionCall: &GeminiFunctionCall{
-							Name: useToolName,
-							Args: map[string]interface{}{},
-						},
+		openaiContent.FuncToToolCalls()
+
+		if openaiContent.ToolCalls != nil {
+			for _, toolCall := range openaiContent.ToolCalls {
+				toolCallId[toolCall.Id] = toolCall.Function.Name
+
+				args := map[string]interface{}{}
+				if toolCall.Function.Arguments != "" {
+					json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
+				}
+
+				content.Parts = append(content.Parts, GeminiPart{
+					FunctionCall: &GeminiFunctionCall{
+						Name: toolCall.Function.Name,
+						Args: args,
 					},
-				},
+				})
+
+			}
+			text := openaiContent.StringContent()
+			if text != "" {
+				contents = append(contents, createSystemResponse(text))
 			}
 		} else if openaiContent.Role == types.ChatMessageRoleFunction || openaiContent.Role == types.ChatMessageRoleTool {
 			if openaiContent.Name == nil {
-				openaiContent.Name = &useToolName
+				if toolName, exists := toolCallId[openaiContent.ToolCallID]; exists {
+					openaiContent.Name = &toolName
+				}
 			}
-			content = GeminiChatContent{
-				Role: "function",
-				Parts: []GeminiPart{
-					{
-						FunctionResponse: &GeminiFunctionResponse{
-							Name: *openaiContent.Name,
-							Response: GeminiFunctionResponseContent{
-								Name:    *openaiContent.Name,
-								Content: openaiContent.StringContent(),
-							},
-						},
+
+			functionPart := GeminiPart{
+				FunctionResponse: &GeminiFunctionResponse{
+					Name: *openaiContent.Name,
+					Response: GeminiFunctionResponseContent{
+						Name:    *openaiContent.Name,
+						Content: openaiContent.StringContent(),
 					},
 				},
 			}
+
+			if len(contents) > 0 && contents[len(contents)-1].Role == "function" {
+				contents[len(contents)-1].Parts = append(contents[len(contents)-1].Parts, functionPart)
+			} else {
+				contents = append(contents, GeminiChatContent{
+					Role:  "function",
+					Parts: []GeminiPart{functionPart},
+				})
+			}
+
+			continue
 		} else {
 			openaiMessagePart := openaiContent.ParseContent()
 			imageNum := 0
@@ -326,7 +358,7 @@ func OpenAIToGeminiChatContent(openaiContents []types.ChatCompletionMessage) ([]
 					}
 					mimeType, data, err := image.GetImageFromUrl(openaiPart.ImageURL.URL)
 					if err != nil {
-						return nil, common.ErrorWrapper(err, "image_url_invalid", http.StatusBadRequest)
+						return nil, "", common.ErrorWrapper(err, "image_url_invalid", http.StatusBadRequest)
 					}
 					content.Parts = append(content.Parts, GeminiPart{
 						InlineData: &GeminiInlineData{
@@ -338,30 +370,20 @@ func OpenAIToGeminiChatContent(openaiContents []types.ChatCompletionMessage) ([]
 			}
 		}
 		contents = append(contents, content)
-		if openaiContent.Role == types.ChatMessageRoleSystem {
-			contents = append(contents, GeminiChatContent{
-				Role: "model",
-				Parts: []GeminiPart{
-					{
-						Text: "Okay",
-					},
-				},
-			})
-		}
 
 	}
 
-	return contents, nil
+	return contents, strings.Join(systemContent, "\n"), nil
 }
 
-func ConvertRole(roleName string) string {
-	switch roleName {
-	case types.ChatMessageRoleFunction, types.ChatMessageRoleTool:
-		return types.ChatMessageRoleFunction
-	case types.ChatMessageRoleAssistant:
-		return "model"
-	default:
-		return types.ChatMessageRoleUser
+func createSystemResponse(text string) GeminiChatContent {
+	return GeminiChatContent{
+		Role: "model",
+		Parts: []GeminiPart{
+			{
+				Text: text,
+			},
+		},
 	}
 }
 
@@ -390,4 +412,10 @@ func (e *GeminiErrorWithStatusCode) ToOpenAiError() *types.OpenAIErrorWithStatus
 		},
 		LocalError: e.LocalError,
 	}
+}
+
+type GeminiErrors []*GeminiErrorResponse
+
+func (e *GeminiErrors) Error() *GeminiErrorResponse {
+	return (*e)[0]
 }

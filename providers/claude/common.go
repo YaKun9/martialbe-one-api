@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"one-api/common"
 	"one-api/types"
 	"strconv"
 )
@@ -63,12 +64,31 @@ func ErrorToClaudeErr(err error) *ClaudeError {
 	}
 }
 
-func ClaudeUsageToOpenaiUsage(cUsage *Usage, usage *types.Usage) {
+func ClaudeUsageToOpenaiUsage(cUsage *Usage, usage *types.Usage) bool {
 	if usage == nil || cUsage == nil {
-		return
+		return false
 	}
 
-	usage.PromptTokens = cUsage.InputTokens
+	if cUsage.InputTokens == 0 || cUsage.OutputTokens == 0 {
+		return false
+	}
+
+	usage.PromptTokensDetails.CachedWriteTokens = cUsage.CacheCreationInputTokens
+	usage.PromptTokensDetails.CachedReadTokens = cUsage.CacheReadInputTokens
+
 	usage.CompletionTokens = cUsage.OutputTokens
-	usage.TotalTokens = cUsage.InputTokens + cUsage.OutputTokens
+	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+
+	return true
+}
+
+func ClaudeOutputUsage(response *ClaudeResponse) int {
+	text := ""
+	for _, c := range response.Content {
+		if c.Type == "text" {
+			text += c.Text
+		}
+	}
+
+	return common.CountTokenText(text, response.Model)
 }

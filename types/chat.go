@@ -16,6 +16,7 @@ const (
 
 const (
 	ChatMessageRoleSystem    = "system"
+	ChatMessageRoleDeveloper = "developer"
 	ChatMessageRoleUser      = "user"
 	ChatMessageRoleAssistant = "assistant"
 	ChatMessageRoleFunction  = "function"
@@ -42,14 +43,15 @@ type ChatCompletionToolCalls struct {
 }
 
 type ChatCompletionMessage struct {
-	Role         string                           `json:"role"`
-	Content      any                              `json:"content,omitempty"`
-	Refusal      string                           `json:"refusal,omitempty"`
-	Name         *string                          `json:"name,omitempty"`
-	FunctionCall *ChatCompletionToolCallsFunction `json:"function_call,omitempty"`
-	ToolCalls    []*ChatCompletionToolCalls       `json:"tool_calls,omitempty"`
-	ToolCallID   string                           `json:"tool_call_id,omitempty"`
-	Audio        any                              `json:"audio,omitempty"`
+	Role             string                           `json:"role"`
+	Content          any                              `json:"content,omitempty"`
+	Refusal          string                           `json:"refusal,omitempty"`
+	ReasoningContent string                           `json:"reasoning_content,omitempty"`
+	Name             *string                          `json:"name,omitempty"`
+	FunctionCall     *ChatCompletionToolCallsFunction `json:"function_call,omitempty"`
+	ToolCalls        []*ChatCompletionToolCalls       `json:"tool_calls,omitempty"`
+	ToolCallID       string                           `json:"tool_call_id,omitempty"`
+	Audio            any                              `json:"audio,omitempty"`
 }
 
 func (m ChatCompletionMessage) StringContent() string {
@@ -132,6 +134,7 @@ func (m *ChatCompletionMessage) FuncToToolCalls() {
 	if m.FunctionCall != nil {
 		m.ToolCalls = []*ChatCompletionToolCalls{
 			{
+				Id:       m.FunctionCall.Name,
 				Type:     ChatMessageRoleFunction,
 				Function: m.FunctionCall,
 			},
@@ -155,6 +158,10 @@ func (m *ChatCompletionMessage) ToolToFuncCalls() {
 	}
 }
 
+func (m *ChatCompletionMessage) IsSystemRole() bool {
+	return m.Role == ChatMessageRoleSystem || m.Role == ChatMessageRoleDeveloper
+}
+
 type ChatMessageImageURL struct {
 	URL    string `json:"url,omitempty"`
 	Detail string `json:"detail,omitempty"`
@@ -169,8 +176,15 @@ type ChatMessagePart struct {
 }
 
 type ChatCompletionResponseFormat struct {
-	Type       string `json:"type,omitempty"`
-	JsonSchema any    `json:"json_schema,omitempty"`
+	Type       string            `json:"type,omitempty"`
+	JsonSchema *FormatJsonSchema `json:"json_schema,omitempty"`
+}
+
+type FormatJsonSchema struct {
+	Description string `json:"description,omitempty"`
+	Name        string `json:"name"`
+	Schema      any    `json:"schema,omitempty"`
+	Strict      any    `json:"strict,omitempty"`
 }
 
 type ChatCompletionRequest struct {
@@ -199,6 +213,8 @@ type ChatCompletionRequest struct {
 	ParallelToolCalls   bool                          `json:"parallel_tool_calls,omitempty"`
 	Modalities          []string                      `json:"modalities,omitempty"`
 	Audio               *ChatAudio                    `json:"audio,omitempty"`
+	ReasoningEffort     *string                       `json:"reasoning_effort,omitempty"`
+	Prediction          any                           `json:"prediction,omitempty"`
 }
 
 func (r ChatCompletionRequest) ParseToolChoice() (toolType, toolFunc string) {

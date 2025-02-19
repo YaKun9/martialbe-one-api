@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { CHANNEL_OPTIONS } from 'constants/ChannelConstants';
 import { useTheme } from '@mui/material/styles';
 import { API } from 'utils/api';
-import { showError, showSuccess, trims } from 'utils/common';
+import { showError, showSuccess, trims, copy } from 'utils/common';
 import {
   Dialog,
   DialogTitle,
@@ -26,6 +26,8 @@ import {
   FormControlLabel,
   Typography,
   Tooltip,
+  Collapse,
+  Box,
   Chip
 } from '@mui/material';
 import LoadingButton from '@mui/lab/LoadingButton';
@@ -44,6 +46,7 @@ import ModelMappingInput from './ModelMappingInput';
 import ModelHeadersInput from './ModelHeadersInput';
 
 import pluginList from '../type/Plugin.json';
+import { Icon } from '@iconify/react';
 
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
@@ -82,6 +85,8 @@ const EditModal = ({ open, channelId, onCancel, onOk, groupOptions, isTag }) => 
   const [batchAdd, setBatchAdd] = useState(false);
   const [providerModelsLoad, setProviderModelsLoad] = useState(false);
   const [hasTag, setHasTag] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [inputValue, setInputValue] = useState('');
 
   const initChannel = (typeValue) => {
     if (typeConfig[typeValue]?.inputLabel) {
@@ -359,7 +364,7 @@ const EditModal = ({ open, channelId, onCancel, onOk, groupOptions, isTag }) => 
               }))
             : [];
         // if (data.model_headers) {
-          data.model_headers =
+        data.model_headers =
           data.model_headers !== ''
             ? Object.entries(JSON.parse(data.model_headers)).map(([key, value], index) => ({
                 index,
@@ -403,14 +408,6 @@ const EditModal = ({ open, channelId, onCancel, onOk, groupOptions, isTag }) => 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
-
-  const handleModelTagClick = (modelId) => {
-    navigator.clipboard.writeText(modelId).then(() => {
-      showSuccess('模型名称已复制');
-    }).catch((error) => {
-      showError('复制失败: ' + error.message);
-    });
-  };
 
   return (
     <Dialog open={open} onClose={onCancel} fullWidth maxWidth={'md'}>
@@ -618,68 +615,98 @@ const EditModal = ({ open, channelId, onCancel, onOk, groupOptions, isTag }) => 
               </FormControl>
 
               <FormControl fullWidth sx={{ ...theme.typography.otherInput }}>
-                <Autocomplete
-                  multiple
-                  freeSolo
-                  id="channel-models-label"
-                  disabled={hasTag}
-                  options={modelOptions}
-                  value={values.models}
-                  onChange={(e, value) => {
-                    const event = {
-                      target: {
-                        name: 'models',
-                        value: value.map((item) =>
-                          typeof item === 'string' ? { id: item, group: t('channel_edit.customModelTip') } : item
-                        )
+                <Box sx={{ position: 'relative' }}>
+                  <Autocomplete
+                    multiple
+                    freeSolo
+                    disableCloseOnSelect
+                    id="channel-models-label"
+                    disabled={hasTag}
+                    options={modelOptions}
+                    value={values.models}
+                    inputValue={inputValue}
+                    onInputChange={(event, newInputValue) => {
+                      if (newInputValue.includes(',')) {
+                        const modelsList = newInputValue
+                          .split(',')
+                          .map((item) => ({
+                            id: item.trim(),
+                            group: t('channel_edit.customModelTip')
+                          }))
+                          .filter((item) => item.id);
+
+                        const updatedModels = [...new Set([...values.models, ...modelsList])];
+                        const event = {
+                          target: {
+                            name: 'models',
+                            value: updatedModels
+                          }
+                        };
+                        handleChange(event);
+                        setInputValue('');
+                      } else {
+                        setInputValue(newInputValue);
                       }
-                    };
-                    handleChange(event);
-                  }}
-                  onBlur={handleBlur}
-                  // filterSelectedOptions
-                  disableCloseOnSelect
-                  renderInput={(params) => (
-                    <TextField {...params} name="models" error={Boolean(errors.models)} label={customizeT(inputLabel.models)} />
-                  )}
-                  groupBy={(option) => option.group}
-                  getOptionLabel={(option) => {
-                    if (typeof option === 'string') {
-                      return option;
-                    }
-                    if (option.inputValue) {
-                      return option.inputValue;
-                    }
-                    return option.id;
-                  }}
-                  filterOptions={(options, params) => {
-                    const filtered = filter(options, params);
-                    const { inputValue } = params;
-                    const isExisting = options.some((option) => inputValue === option.id);
-                    if (inputValue !== '' && !isExisting) {
-                      filtered.push({
-                        id: inputValue,
-                        group: t('channel_edit.customModelTip')
-                      });
-                    }
-                    return filtered;
-                  }}
-                  renderOption={(props, option, { selected }) => (
-                    <li {...props}>
-                      <Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />
-                      {option.id}
-                    </li>
-                  )}
-                  renderTags={(value, getTagProps) =>
-                    value.map((option, index) => (
-                      <Chip
-                        label={option.id}
-                        {...getTagProps({ index })}
-                        onClick={() => handleModelTagClick(option.id)}
+                    }}
+                    onChange={(e, value) => {
+                      const event = {
+                        target: {
+                          name: 'models',
+                          value: value.map((item) =>
+                            typeof item === 'string' ? { id: item, group: t('channel_edit.customModelTip') } : item
+                          )
+                        }
+                      };
+                      handleChange(event);
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        name="models"
+                        error={Boolean(errors.models)}
+                        label={customizeT(inputLabel.models)}
+                        InputProps={{
+                          ...params.InputProps
+                        }}
                       />
-                    ))
-                  }
-                />
+                    )}
+                    groupBy={(option) => option.group}
+                    getOptionLabel={(option) => {
+                      if (typeof option === 'string') {
+                        return option;
+                      }
+                      if (option.inputValue) {
+                        return option.inputValue;
+                      }
+                      return option.id;
+                    }}
+                    filterOptions={(options, params) => {
+                      const filtered = filter(options, params);
+                      const { inputValue } = params;
+                      const isExisting = options.some((option) => inputValue === option.id);
+                      if (inputValue !== '' && !isExisting) {
+                        filtered.push({
+                          id: inputValue,
+                          group: t('channel_edit.customModelTip')
+                        });
+                      }
+                      return filtered;
+                    }}
+                    renderOption={(props, option, { selected }) => (
+                      <li {...props}>
+                        <Checkbox icon={icon} checkedIcon={checkedIcon} style={{ marginRight: 8 }} checked={selected} />
+                        {option.id}
+                      </li>
+                    )}
+                    renderTags={(value, getTagProps) =>
+                      value.map((option, index) => (
+                        <Box key={index} sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Chip label={option.id} {...getTagProps({ index })} onClick={() => copy(option.id)} />
+                        </Box>
+                      ))
+                    }
+                  />
+                </Box>
                 {errors.models ? (
                   <FormHelperText error id="helper-tex-channel-models-label">
                     {errors.models}
@@ -694,6 +721,14 @@ const EditModal = ({ open, channelId, onCancel, onOk, groupOptions, isTag }) => 
                 }}
               >
                 <ButtonGroup variant="outlined" aria-label="small outlined primary button group">
+                  <Button
+                    onClick={() => {
+                      const modelString = values.models.map((model) => model.id).join(',');
+                      copy(modelString);
+                    }}
+                  >
+                    {t('channel_edit.copyModels')}
+                  </Button>
                   <Button
                     disabled={hasTag}
                     onClick={() => {
@@ -918,48 +953,82 @@ const EditModal = ({ open, channelId, onCancel, onOk, groupOptions, isTag }) => 
                   const plugin = pluginList[values.type][pluginId];
                   return (
                     <>
-                      <Divider sx={{ ...theme.typography.otherInput }} />
-                      <Typography variant="h3">{customizeT(plugin.name)}</Typography>
-                      <Typography variant="caption">{customizeT(plugin.description)}</Typography>
-                      {Object.keys(plugin.params).map((paramId) => {
-                        const param = plugin.params[paramId];
-                        const name = `plugin.${pluginId}.${paramId}`;
-                        return param.type === 'bool' ? (
-                          <FormControl key={name} fullWidth sx={{ ...theme.typography.otherInput }}>
-                            <FormControlLabel
-                              key={name}
-                              required
-                              control={
-                                <Switch
-                                  key={name}
-                                  name={name}
-                                  disabled={hasTag}
-                                  checked={values.plugin?.[pluginId]?.[paramId] || false}
-                                  onChange={(event) => {
-                                    setFieldValue(name, event.target.checked);
-                                  }}
-                                />
-                              }
-                              label={t('channel_edit.isEnable')}
-                            />
-                            <FormHelperText id="helper-tex-channel-key-label"> {customizeT(param.description)} </FormHelperText>
-                          </FormControl>
-                        ) : (
-                          <FormControl key={name} fullWidth sx={{ ...theme.typography.otherInput }}>
-                            <TextField
-                              multiline
-                              key={name}
-                              name={name}
-                              disabled={hasTag}
-                              value={values.plugin?.[pluginId]?.[paramId] || ''}
-                              label={customizeT(param.name)}
-                              placeholder={customizeT(param.description)}
-                              onChange={handleChange}
-                            />
-                            <FormHelperText id="helper-tex-channel-key-label"> {customizeT(param.description)} </FormHelperText>
-                          </FormControl>
-                        );
-                      })}
+                      <Box
+                        sx={{
+                          border: '1px solid #e0e0e0',
+                          borderRadius: 2,
+                          marginTop: 2,
+                          marginBottom: 2,
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: 2
+                          }}
+                        >
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="h3">{customizeT(plugin.name)}</Typography>
+                            <Typography variant="caption">{customizeT(plugin.description)}</Typography>
+                          </Box>
+                          <Button
+                            onClick={() => setExpanded(!expanded)}
+                            endIcon={
+                              expanded ? <Icon icon="solar:alt-arrow-up-line-duotone" /> : <Icon icon="solar:alt-arrow-down-line-duotone" />
+                            }
+                            sx={{ textTransform: 'none', marginLeft: 2 }}
+                          >
+                            {expanded ? t('channel_edit.collapse') : t('channel_edit.expand')}
+                          </Button>
+                        </Box>
+
+                        <Collapse in={expanded}>
+                          <Box sx={{ padding: 2, marginTop: -3 }}>
+                            {Object.keys(plugin.params).map((paramId) => {
+                              const param = plugin.params[paramId];
+                              const name = `plugin.${pluginId}.${paramId}`;
+                              return param.type === 'bool' ? (
+                                <FormControl key={name} fullWidth sx={{ ...theme.typography.otherInput }}>
+                                  <FormControlLabel
+                                    key={name}
+                                    required
+                                    control={
+                                      <Switch
+                                        key={name}
+                                        name={name}
+                                        disabled={hasTag}
+                                        checked={values.plugin?.[pluginId]?.[paramId] || false}
+                                        onChange={(event) => {
+                                          setFieldValue(name, event.target.checked);
+                                        }}
+                                      />
+                                    }
+                                    label={t('channel_edit.isEnable')}
+                                  />
+                                  <FormHelperText id="helper-tex-channel-key-label"> {customizeT(param.description)} </FormHelperText>
+                                </FormControl>
+                              ) : (
+                                <FormControl key={name} fullWidth sx={{ ...theme.typography.otherInput }}>
+                                  <TextField
+                                    multiline
+                                    key={name}
+                                    name={name}
+                                    disabled={hasTag}
+                                    value={values.plugin?.[pluginId]?.[paramId] || ''}
+                                    label={customizeT(param.name)}
+                                    placeholder={customizeT(param.description)}
+                                    onChange={handleChange}
+                                  />
+                                  <FormHelperText id="helper-tex-channel-key-label"> {customizeT(param.description)} </FormHelperText>
+                                </FormControl>
+                              );
+                            })}
+                          </Box>
+                        </Collapse>
+                      </Box>
                     </>
                   );
                 })}
